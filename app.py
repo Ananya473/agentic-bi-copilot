@@ -1,0 +1,208 @@
+
+import streamlit as st
+import plotly.express as px
+
+from src.analytics import (
+    get_total_revenue,
+    get_monthly_revenue,
+    get_top_products,
+    get_revenue_by_country,
+    get_top_customers,
+    get_returns_summary,
+)
+from src.question_service import answer_with_sql
+
+
+st.set_page_config(
+    page_title="Retail BI Copilot",
+    page_icon="📊",
+    layout="wide",
+)
+
+st.title("Retail Business Intelligence Copilot")
+st.caption(
+    "Real-world retail transactions | Sales analytics | "
+    "SQL-powered business questions"
+)
+
+
+@st.cache_data(ttl=60)
+def load_dashboard_data():
+    return {
+        "kpis": get_total_revenue(),
+        "monthly": get_monthly_revenue(),
+        "products": get_top_products(10),
+        "countries": get_revenue_by_country(15),
+        "customers": get_top_customers(10),
+        "returns": get_returns_summary(),
+    }
+
+
+try:
+    data = load_dashboard_data()
+
+    kpis = data["kpis"].iloc[0]
+    monthly = data["monthly"]
+    products = data["products"]
+    countries = data["countries"]
+    customers = data["customers"]
+    returns = data["returns"].iloc[0]
+
+    # KPI cards
+    col1, col2, col3, col4 = st.columns(4)
+
+    col1.metric(
+        "Sales Revenue",
+        f"{float(kpis['total_revenue'] or 0):,.2f}",
+    )
+    col2.metric(
+        "Orders",
+        f"{int(kpis['total_orders'] or 0):,}",
+    )
+    col3.metric(
+        "Units Sold",
+        f"{int(kpis['units_sold'] or 0):,}",
+    )
+    col4.metric(
+        "Unique Customers",
+        f"{int(kpis['unique_customers'] or 0):,}",
+    )
+
+    st.caption(
+        "Revenue uses positive-quantity, positive-price sales rows "
+        "excluding invoices beginning with C. Currency is not "
+        "converted or explicitly labelled because the dataset "
+        "does not provide a currency column."
+    )
+
+    st.divider()
+
+    # Monthly revenue trend
+    st.subheader("Monthly Revenue Trend")
+
+    if not monthly.empty:
+        fig_monthly = px.line(
+            monthly,
+            x="month",
+            y="total_revenue",
+            markers=True,
+            title="Revenue by Month",
+            labels={
+                "month": "Month",
+                "total_revenue": "Revenue",
+            },
+        )
+        st.plotly_chart(fig_monthly, use_container_width=True)
+
+    left, right = st.columns(2)
+
+    with left:
+        st.subheader("Top Products by Revenue")
+
+        fig_products = px.bar(
+            products.sort_values("total_revenue"),
+            x="total_revenue",
+            y="product",
+            orientation="h",
+            hover_data=["stock_code", "units_sold"],
+            labels={
+                "total_revenue": "Revenue",
+                "product": "Product",
+            },
+        )
+        st.plotly_chart(fig_products, use_container_width=True)
+
+    with right:
+        st.subheader("Top Countries by Revenue")
+
+        fig_countries = px.bar(
+            countries.sort_values("total_revenue"),
+            x="total_revenue",
+            y="country",
+            orientation="h",
+            hover_data=["orders", "customers"],
+            labels={
+                "total_revenue": "Revenue",
+                "country": "Country",
+            },
+        )
+        st.plotly_chart(fig_countries, use_container_width=True)
+
+    st.divider()
+
+    left, right = st.columns(2)
+
+    with left:
+        st.subheader("Top Customers")
+
+        st.dataframe(
+            customers,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    with right:
+        st.subheader("Returns and Cancellations")
+
+        st.metric(
+            "Negative-Quantity Lines",
+            f"{int(returns['negative_quantity_lines'] or 0):,}",
+        )
+        st.metric(
+            "Cancelled Invoice Lines",
+            f"{int(returns['cancelled_invoice_lines'] or 0):,}",
+        )
+        st.metric(
+            "Negative-Quantity Value (Absolute)",
+            f"{float(returns['negative_quantity_value'] or 0):,.2f}",
+        )
+
+        st.caption(
+            "Negative quantities and cancellation invoice lines "
+            "can overlap. Absolute value is not the same as net loss."
+        )
+
+    st.divider()
+
+    st.subheader("Ask Your Business Question")
+
+    question = st.text_input(
+        "Enter a question about sales, products, customers, or countries",
+        placeholder="e.g. Which countries generate the most revenue?",
+    )
+
+    if st.button("Analyze", type="primary"):
+        if not question.strip():
+            st.warning("Please enter a question.")
+        else:
+            try:
+                with st.spinner("Analyzing your question..."):
+                    result = answer_with_sql(question)
+
+                st.success("Query executed successfully.")
+                st.caption(
+                    f"SQL generated by: "
+                    f"{result.get('source', 'Configured query generator')}"
+                )
+
+                st.subheader("Generated SQL")
+                st.code(result["sql"], language="sql")
+
+                st.subheader("Query Results")
+                st.dataframe(
+                    result["data"],
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+            except ValueError as error:
+                st.warning(str(error))
+            except Exception:
+                st.error(
+                    "The question could not be processed. "
+                    "Check the query generator and SQL execution rules."
+                )
+
+except Exception as error:
+    st.error("The dashboard could not load its data.")
+    st.exception(error)
