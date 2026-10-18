@@ -39,6 +39,21 @@ def get_monthly_revenue() -> pd.DataFrame:
         ORDER BY month
     """)
 
+def get_daily_revenue() -> pd.DataFrame:
+    """Return daily revenue, distinct orders, and units sold."""
+
+    return run_query("""
+        SELECT
+            substr(order_date, 1, 10) AS date,
+            ROUND(SUM(revenue), 2) AS total_revenue,
+            COUNT(DISTINCT order_id) AS orders,
+            SUM(quantity) AS units_sold
+        FROM sales
+        GROUP BY substr(order_date, 1, 10)
+        ORDER BY date
+    """)
+
+
 
 def get_revenue_by_category() -> pd.DataFrame:
     """Compatibility function: this dataset has no real categories."""
