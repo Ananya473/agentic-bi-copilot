@@ -9,18 +9,14 @@ Business teams need to answer questions about revenue, product performance, cust
 This project combines a Streamlit dashboard with Google Gemini-powered SQL generation and a SQLite database to make retail sales data easier to explore. Users can ask business questions in natural language, inspect the generated SQL, and view the results through the application.
 
 ## Features
-
-- **KPI dashboard:** Track total revenue, order count, units sold, and unique customers.
-- **Revenue trends:** Explore monthly revenue patterns.
-- **Product analytics:** Identify products by sales volume and revenue.
-- **Geographic analysis:** Compare revenue and orders across countries.
-- **Customer analytics:** Examine customer-level purchasing activity.
-- **Returns and cancellations:** Analyze negative-quantity transactions and cancellation indicators.
-- **Natural-language-to-SQL:** Convert supported business questions into SQL using Google Gemini.
-- **SQL visibility:** Inspect the generated query and its results.
-- **Rule-based fallback:** Support common analytical questions when Gemini is unavailable.
-- **Read-only query execution:** Restrict database access to analytical queries.
-- **Automated tests:** Validate analytics, SQL generation, and question handling.
+- **Interactive analytics dashboard:** Explore retail KPIs, monthly revenue, products, countries, customers, and returns.
+- **Natural-language Text-to-SQL:** Translate supported business questions into SQL using Gemini, with a rule-based fallback.
+- **Read-only SQL execution:** Restrict analytical queries to approved read operations.
+- **Statistical anomaly detection:** Flag unusual daily revenue using a rolling median and median absolute deviation (MAD).
+- **Multi-step revenue investigation:** Compare monthly performance and investigate country- and product-level revenue changes.
+- **Tool orchestration:** Select and execute predefined analysis tools using a Gemini planner or rule-based fallback.
+- **Evidence-backed reporting:** Consolidate actual query results, revenue comparisons, anomaly flags, and suggested follow-up checks into a downloadable Markdown report.
+- **Automated testing:** Test analytics, anomaly detection, investigation logic, agent execution, and report generation.
 
 ## Dataset
 
@@ -45,30 +41,50 @@ The project imports the source data into SQLite and creates a sales table for po
 - **Google Gemini API** — natural-language SQL generation
 - **Pytest** — automated testing
 
+
 ## Project Structure
 
 ```text
 agentic-bi-copilot/
-├── app.py
-├── requirements.txt
-├── README.md
+│
+├── .env.example
 ├── .gitignore
+├── README.md
+├── requirements.txt
+├── app.py
+│
 ├── data/
-│   ├── retail_sales.db
-│   └── extracted/
+│   ├── Online Retail.xlsx          # Local dataset; not committed
+│   ├── extracted/
+│   │   └── Online Retail.xlsx      # Extracted dataset; not committed
+│   └── retail_sales.db             # Generated SQLite database; not committed
+│
 ├── src/
-│   ├── analytics.py
-│   ├── import_online_retail.py
-│   ├── insights.py
-│   ├── query_engine.py
-│   ├── question_service.py
-│   └── text_to_sql.py
+│   ├── __init__.py
+│   ├── analytics.py                # SQL-based retail analytics and KPIs
+│   ├── agent.py                    # Tool selection and orchestration
+│   ├── anomaly_detection.py        # Statistical revenue anomaly detection
+│   ├── create_database.py          # Database creation utilities
+│   ├── gemini_connection_check.py  # Gemini API connectivity check
+│   ├── import_online_retail.py     # Retail dataset import pipeline
+│   ├── insights.py                 # Business insight generation
+│   ├── investigator.py             # Multi-step revenue investigation
+│   ├── query_engine.py             # Read-only SQL execution safeguards
+│   ├── question_service.py         # Business question processing
+│   ├── reporting.py                # Evidence-backed report generation
+│   └── text_to_sql.py              # Natural-language-to-SQL generation
+│
 └── tests/
-    ├── test_insights.py
-    └── test_text_to_sql.py
+    ├── test_agent.py               # Agent planning and execution tests
+    ├── test_anomaly_detection.py   # Anomaly detection tests
+    ├── test_insights.py            # Business insight tests
+    ├── test_investigator.py        # Revenue investigation tests
+    ├── test_reporting.py           # Report generation tests
+    └── test_text_to_sql.py         # Text-to-SQL and service tests
 ```
 
-*The structure above describes the main project files. Your local folders may contain additional files.*
+**Note:** The `data/` files shown above are local runtime files and are excluded from Git. Download or extract the dataset and generate the SQLite database using the project's setup instructions.
+
 
 ## Getting Started
 
