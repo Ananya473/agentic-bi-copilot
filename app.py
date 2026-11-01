@@ -678,6 +678,47 @@ try:
         "Powered by LangGraph, Gemini, SQL analytics and "
         "Retrieval-Augmented Generation (RAG)."
     )
+    
+    # Agent Workflow Architecture
+    with st.expander("View Multi-Agent Architecture", expanded=True):
+        workflow_diagram = """
+        digraph AgentWorkflow {
+            rankdir=TB;
+            graph [bgcolor="transparent", nodesep=0.5, ranksep=0.6];
+            node [shape=box, style="rounded,filled",
+                  fontname="Arial", color="#64748b"];
+            edge [color="#64748b"];
+
+            User [label="User Question", fillcolor="#dbeafe"];
+            Supervisor [label="Supervisor Agent\\nGemini Planning",
+                         fillcolor="#ede9fe"];
+
+            DataAnalyst [label="Data Analyst\\nSQL Queries",
+                         fillcolor="#d1fae5"];
+            Investigator [label="Investigator\\nRevenue & Anomalies",
+                          fillcolor="#d1fae5"];
+            Researcher [label="Knowledge Researcher\\nRAG + ChromaDB",
+                        fillcolor="#d1fae5"];
+
+            Reporter [label="Report Agent\\nEvidence Consolidation",
+                      fillcolor="#fef3c7"];
+            Output [label="Final BI Report", fillcolor="#e0e7ff"];
+
+            User -> Supervisor;
+            Supervisor -> DataAnalyst;
+            Supervisor -> Investigator;
+            Supervisor -> Researcher;
+
+            DataAnalyst -> Reporter;
+            Investigator -> Reporter;
+            Researcher -> Reporter;
+
+            Reporter -> Output;
+        }
+        """
+
+        st.graphviz_chart(workflow_diagram, use_container_width=True)
+
 
     agent_question = st.text_input(
         "What would you like the AI team to investigate?",
@@ -728,6 +769,63 @@ try:
                             "No specialist completed successfully.",
                         )
                     )
+                
+                # ------------------------------------------
+                # Agent Execution Tracker
+                # ------------------------------------------
+
+                st.subheader("Agent Execution Tracker")
+
+                selected_agents = {
+                    item.get("agent")
+                    for item in agent_result.get("agents_plan", [])
+                }
+
+                executed_results = {
+                    item.get("agent"): item
+                    for item in agent_result.get("agent_results", [])
+                }
+
+                agent_details = [
+                    ("Supervisor", "Task planning", "completed"),
+                    ("Data Analyst", "SQL queries", "data_analyst"),
+                    ("Investigator", "Revenue and anomaly analysis", "investigator"),
+                    ("Knowledge Researcher", "RAG and document retrieval", "knowledge_researcher"),
+                ]
+
+                tracker_rows = []
+
+                for name, responsibility, agent_key in agent_details:
+                    if agent_key == "completed":
+                        status = "Completed"
+                    elif agent_key not in selected_agents:
+                        status = "Not selected"
+                    else:
+                        result = executed_results.get(agent_key, {})
+                        status = result.get("status", "pending").title()
+
+                    tracker_rows.append({
+                        "Agent": name,
+                        "Responsibility": responsibility,
+                        "Execution Status": status,
+                    })
+
+                report_status = agent_result.get(
+                    "report_status", "pending"
+                )
+
+                tracker_rows.append({
+                    "Agent": "Report Agent",
+                    "Responsibility": "Evidence consolidation",
+                    "Execution Status": report_status.title(),
+                })
+
+                st.dataframe(
+                    tracker_rows,
+                    use_container_width=True,
+                    hide_index=True,
+                )
+    
 
                 # ------------------------------------------
                 # Supervisor's selected agents
@@ -947,6 +1045,61 @@ try:
 
                             for source in specialist.get("sources", []):
                                 st.markdown(f"- `{source}`")
+                            
+                            # RAG Evidence Viewer
+                            st.divider()
+                            st.markdown("### RAG Evidence Viewer")
+
+                            retrieved_documents = specialist.get(
+                                "retrieved_documents", []
+                            )
+
+                            if retrieved_documents:
+                                st.caption(
+                                    f"Retrieved {len(retrieved_documents)} "
+                                    "document(s) from the ChromaDB knowledge base."
+                                )
+
+                                for index, document in enumerate(
+                                    retrieved_documents, start=1
+                                ):
+                                    source = document.get(
+                                        "source", "Unknown source"
+                                    )
+                                    category = document.get(
+                                        "category", "General"
+                                    )
+                                    distance = document.get("distance")
+
+                                    with st.expander(
+                                        f"Document {index}: {source}",
+                                        expanded=index == 1,
+                                    ):
+                                        st.write(
+                                            f"**Category:** {category}"
+                                        )
+
+                                        if isinstance(
+                                            distance, (int, float)
+                                        ):
+                                            st.caption(
+                                                f"ChromaDB distance: "
+                                                f"{distance:.4f} "
+                                                "(lower generally indicates a closer match)"
+                                            )
+
+                                        st.markdown("**Retrieved Content**")
+                                        st.write(
+                                            document.get(
+                                                "document",
+                                                "No document content available.",
+                                            )
+                                        )
+                            else:
+                                st.info(
+                                    "No retrieved document evidence is available."
+                                )
+
 
                 # ------------------------------------------
                 # Final consolidated report
