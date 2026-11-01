@@ -1,0 +1,15 @@
+Document: Inventory Management Guidelines
+Category: Operations
+
+Inventory availability directly affects product sales.
+
+Stock shortages can result in missed orders and
+reduced revenue.
+
+Excess inventory can increase storage and holding costs.
+
+Products with declining sales should be reviewed
+before replenishment decisions are made.
+
+Inventory planning should consider historical demand,
+seasonality, and product performance.

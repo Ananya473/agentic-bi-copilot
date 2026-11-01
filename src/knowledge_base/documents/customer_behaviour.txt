@@ -1,0 +1,14 @@
+Document: Customer Purchasing Behaviour
+Category: Customer Analytics
+
+Customer purchasing patterns can vary by country,
+product category, season, and promotional activity.
+
+Customer retention is important for maintaining
+consistent revenue.
+
+Changes in active customer count, repeat purchases,
+and average order value can affect overall revenue.
+
+Customer segmentation can help identify high-value
+customers and changing purchasing patterns.

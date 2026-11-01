@@ -3,61 +3,65 @@ from langgraph.graph import StateGraph, START, END
 
 from src.graph.state import AgentState
 from src.graph.nodes import (
-    planner_node,
-    executor_node,
+    supervisor_node,
+    specialist_executor_node,
+    report_node,
     review_node,
 )
 
 
 def route_after_execution(state: AgentState) -> str:
-    """Decide whether another planned tool needs execution."""
+    """Check whether another specialist agent needs to run."""
 
-    if state["current_step"] < len(state["plan"]):
+    if state["current_agent"] < len(state["agents_plan"]):
         return "execute"
 
-    return "review"
+    return "report"
 
 
 def build_workflow():
-    """Build the LangGraph business intelligence workflow."""
+    """Build the multi-agent business intelligence workflow."""
 
     graph = StateGraph(AgentState)
 
-    graph.add_node("planner", planner_node)
-    graph.add_node("executor", executor_node)
+    graph.add_node("supervisor", supervisor_node)
+    graph.add_node("specialist_executor", specialist_executor_node)
+    graph.add_node("reporter", report_node)
     graph.add_node("reviewer", review_node)
 
-    graph.add_edge(START, "planner")
-    graph.add_edge("planner", "executor")
+    graph.add_edge(START, "supervisor")
+    graph.add_edge("supervisor", "specialist_executor")
 
     graph.add_conditional_edges(
-        "executor",
+        "specialist_executor",
         route_after_execution,
         {
-            "execute": "executor",
-            "review": "reviewer",
+            "execute": "specialist_executor",
+            "report": "reporter",
         },
     )
 
+    graph.add_edge("reporter", "reviewer")
     graph.add_edge("reviewer", END)
 
     return graph.compile()
 
 
-# Compile the workflow once and reuse it.
+# Compile once and reuse.
 agent_workflow = build_workflow()
 
 
 def run_graph(question: str) -> dict:
-    """Run the LangGraph workflow for a business question."""
+    """Run the multi-agent workflow."""
 
     if not question or not question.strip():
         raise ValueError("Please enter a business question.")
 
     initial_state = {
         "question": question.strip(),
-        "results": [],
-        "current_step": 0,
+        "current_agent": 0,
+        "agent_results": [],
+        "execution_trace": [],
     }
 
     return agent_workflow.invoke(initial_state)

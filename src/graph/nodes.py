@@ -1,75 +1,107 @@
 
-from src.agent import plan_question, _execute_tool
+from src.agents.supervisor import plan_agents
+from src.agents.data_analyst import data_analyst_agent
+from src.agents.investigator_agent import investigator_agent
+from src.agents.knowledge_researcher import knowledge_researcher_agent
+from src.agents.report_agent import report_agent
 
 
-def planner_node(state: dict) -> dict:
-    """Create a validated plan using the existing Gemini planner."""
+AGENT_FUNCTIONS = {
+    "data_analyst": data_analyst_agent,
+    "investigator": investigator_agent,
+    "knowledge_researcher": knowledge_researcher_agent,
+}
+
+
+def supervisor_node(state: dict) -> dict:
+    """Select specialist agents for the business question."""
 
     question = state["question"]
-
-    plan_data = plan_question(question)
+    plan = plan_agents(question)
 
     return {
-        "planner_source": plan_data["source"],
-        "plan": plan_data["steps"],
-        "current_step": 0,
-        "results": [],
+        "planner_source": plan["source"],
+        "agents_plan": plan["agents"],
+        "current_agent": 0,
+        "agent_results": [],
+        "execution_trace": [],
     }
 
 
-def executor_node(state: dict) -> dict:
-    """Execute one approved tool at a time."""
+def specialist_executor_node(state: dict) -> dict:
+    """Execute the next selected specialist agent."""
 
-    plan = state["plan"]
-    index = state["current_step"]
-    question = state["question"]
+    index = state["current_agent"]
+    plan = state["agents_plan"]
 
     if index >= len(plan):
         return {}
 
-    step = plan[index]
-    tool_name = step["tool"]
+    selected = plan[index]
+    agent_name = selected["agent"]
 
     try:
-        output = _execute_tool(tool_name, question)
+        agent_function = AGENT_FUNCTIONS[agent_name]
+
+        if agent_name == "investigator":
+            output = agent_function()
+        else:
+            output = agent_function(state["question"])
 
         result = {
-            "tool": tool_name,
-            "reason": step["reason"],
-            "status": "completed",
-            "output": output,
+            **output,
+            "reason": selected.get("reason", ""),
         }
 
     except Exception as error:
         result = {
-            "tool": tool_name,
-            "reason": step["reason"],
+            "agent": agent_name,
             "status": "failed",
             "error": str(error),
-            "output": None,
+            "reason": selected.get("reason", ""),
         }
 
     return {
-        "results": state.get("results", []) + [result],
-        "current_step": index + 1,
+        "agent_results": state.get("agent_results", []) + [result],
+        "execution_trace": (
+            state.get("execution_trace", []) + [agent_name]
+        ),
+        "current_agent": index + 1,
+    }
+
+
+def report_node(state: dict) -> dict:
+    """Combine specialist outputs into a final report."""
+
+    result = report_agent(
+        question=state["question"],
+        planner_source=state["planner_source"],
+        agent_results=state.get("agent_results", []),
+    )
+
+    return {
+        "final_report": result.get(
+            "report",
+            result.get("error", "Report generation failed."),
+        ),
+        "report_status": result.get("status", "failed"),
     }
 
 
 def review_node(state: dict) -> dict:
-    """Review the execution results."""
+    """Review specialist execution results."""
 
-    results = state.get("results", [])
+    results = state.get("agent_results", [])
 
-    success = any(
-        result["status"] == "completed"
+    successful = sum(
+        result.get("status") == "completed"
         for result in results
     )
 
     return {
-        "success": success,
-        "final_report": (
-            f"Executed {len(results)} analytical tool(s). "
-            f"{sum(r['status'] == 'completed' for r in results)} "
-            "completed successfully."
+        "success": successful > 0,
+        "execution_summary": (
+            f"Executed {len(results)} specialist agent(s). "
+            f"{successful} completed successfully."
         ),
     }
