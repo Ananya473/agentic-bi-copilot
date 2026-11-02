@@ -27,3 +27,8 @@ data/*.xlsx
 data/**/*.xlsx
 data/extracted/
 data/online+retail/
+# Local vector database
+chroma_db/
+
+# Generated files
+*.log

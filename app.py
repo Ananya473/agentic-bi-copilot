@@ -13,8 +13,7 @@ from src.analytics import (
 from src.anomaly_detection import detect_revenue_anomalies
 from src.question_service import answer_with_sql
 from src.investigator import investigate_revenue_change
-from src.agent import run_agent
-from src.reporting import build_evidence_report
+from src.graph.workflow import run_graph
 # --------------------------------------------------
 # Page configuration
 # --------------------------------------------------
@@ -661,112 +660,244 @@ try:
                 )
                 st.exception(error)
 
+    
     # --------------------------------------------------
-    # Agentic Analysis
+    # Multi-Agent Analysis using LangGraph
     # --------------------------------------------------
 
     st.divider()
-    st.header("Agentic Analysis")
+    st.header("Multi-Agent Business Intelligence")
 
     st.write(
-        "Ask a business question and let the agent select relevant "
-        "analytics tools, execute them, and present the results."
+        "Ask a business question and let a Supervisor coordinate "
+        "specialist AI agents to analyze your retail data and "
+        "business knowledge."
     )
 
     st.caption(
-        "The agent uses a Gemini-based planner when available and "
-        "a rule-based fallback when planning fails. Only predefined "
-        "analysis tools can be executed."
+        "Powered by LangGraph, Gemini, SQL analytics and "
+        "Retrieval-Augmented Generation (RAG)."
     )
+    
+    # Agent Workflow Architecture
+    with st.expander("View Multi-Agent Architecture", expanded=True):
+        workflow_diagram = """
+        digraph AgentWorkflow {
+            rankdir=TB;
+            graph [bgcolor="transparent", nodesep=0.5, ranksep=0.6];
+            node [shape=box, style="rounded,filled",
+                  fontname="Arial", color="#64748b"];
+            edge [color="#64748b"];
+
+            User [label="User Question", fillcolor="#dbeafe"];
+            Supervisor [label="Supervisor Agent\\nGemini Planning",
+                         fillcolor="#ede9fe"];
+
+            DataAnalyst [label="Data Analyst\\nSQL Queries",
+                         fillcolor="#d1fae5"];
+            Investigator [label="Investigator\\nRevenue & Anomalies",
+                          fillcolor="#d1fae5"];
+            Researcher [label="Knowledge Researcher\\nRAG + ChromaDB",
+                        fillcolor="#d1fae5"];
+
+            Reporter [label="Report Agent\\nEvidence Consolidation",
+                      fillcolor="#fef3c7"];
+            Output [label="Final BI Report", fillcolor="#e0e7ff"];
+
+            User -> Supervisor;
+            Supervisor -> DataAnalyst;
+            Supervisor -> Investigator;
+            Supervisor -> Researcher;
+
+            DataAnalyst -> Reporter;
+            Investigator -> Reporter;
+            Researcher -> Reporter;
+
+            Reporter -> Output;
+        }
+        """
+
+        st.graphviz_chart(workflow_diagram, use_container_width=True)
+
 
     agent_question = st.text_input(
-        "What would you like the agent to investigate?",
+        "What would you like the AI team to investigate?",
         placeholder=(
-            "e.g. Why did revenue change, and were there anomalies?"
+            "e.g. Why did revenue decline, and could promotions "
+            "explain it?"
         ),
         key="agent_question_input",
     )
 
     if st.button(
-        "Run Agentic Analysis",
+        "Run Multi-Agent Analysis",
         type="primary",
         key="run_agentic_analysis",
     ):
         if not agent_question.strip():
             st.warning("Please enter a business question.")
+
         else:
             try:
                 with st.spinner(
-                    "Planning analysis and executing selected tools..."
+                    "Supervisor is planning and coordinating specialist agents..."
                 ):
-                    agent_result = run_agent(agent_question)
-                agent_report = build_evidence_report(agent_result)
+                    agent_result = run_graph(agent_question)
 
-                with st.expander(
-                    "Consolidated Evidence Report",
-                    expanded=True,
-                ):
-                    st.markdown(agent_report)
-
-                    st.download_button(
-                        label="Download Report (.md)",
-                        data=agent_report,
-                        file_name="bi_investigation_report.md",
-                        mime="text/markdown",
-                        key="download_agent_report",
-                    )
+                # ------------------------------------------
+                # Execution overview
+                # ------------------------------------------
 
                 st.subheader("Execution Overview")
+
                 st.caption(
-                    f"Planner: {agent_result['planner_source']}"
+                    f"Supervisor planning method: "
+                    f"{agent_result.get('planner_source', 'Unknown')}"
                 )
 
-                if agent_result["success"]:
-                    st.success("At least one analysis tool completed.")
+                if agent_result.get("success"):
+                    st.success(
+                        agent_result.get(
+                            "execution_summary",
+                            "At least one specialist completed successfully.",
+                        )
+                    )
                 else:
-                    st.error("All selected analysis tools failed.")
+                    st.error(
+                        agent_result.get(
+                            "execution_summary",
+                            "No specialist completed successfully.",
+                        )
+                    )
+                
+                # ------------------------------------------
+                # Agent Execution Tracker
+                # ------------------------------------------
 
-                st.markdown("**Selected investigation plan**")
+                st.subheader("Agent Execution Tracker")
 
-                for index, step in enumerate(
-                    agent_result["plan"], start=1
+                selected_agents = {
+                    item.get("agent")
+                    for item in agent_result.get("agents_plan", [])
+                }
+
+                executed_results = {
+                    item.get("agent"): item
+                    for item in agent_result.get("agent_results", [])
+                }
+
+                agent_details = [
+                    ("Supervisor", "Task planning", "completed"),
+                    ("Data Analyst", "SQL queries", "data_analyst"),
+                    ("Investigator", "Revenue and anomaly analysis", "investigator"),
+                    ("Knowledge Researcher", "RAG and document retrieval", "knowledge_researcher"),
+                ]
+
+                tracker_rows = []
+
+                for name, responsibility, agent_key in agent_details:
+                    if agent_key == "completed":
+                        status = "Completed"
+                    elif agent_key not in selected_agents:
+                        status = "Not selected"
+                    else:
+                        result = executed_results.get(agent_key, {})
+                        status = result.get("status", "pending").title()
+
+                    tracker_rows.append({
+                        "Agent": name,
+                        "Responsibility": responsibility,
+                        "Execution Status": status,
+                    })
+
+                report_status = agent_result.get(
+                    "report_status", "pending"
+                )
+
+                tracker_rows.append({
+                    "Agent": "Report Agent",
+                    "Responsibility": "Evidence consolidation",
+                    "Execution Status": report_status.title(),
+                })
+
+                st.dataframe(
+                    tracker_rows,
+                    use_container_width=True,
+                    hide_index=True,
+                )
+    
+
+                # ------------------------------------------
+                # Supervisor's selected agents
+                # ------------------------------------------
+
+                st.subheader("Supervisor's Agent Selection")
+
+                for index, selected in enumerate(
+                    agent_result.get("agents_plan", []),
+                    start=1,
                 ):
                     st.markdown(
-                        f"{index}. **{step['tool']}** — "
-                        f"{step['reason']}"
+                        f"{index}. **{selected['agent'].replace('_', ' ').title()}**"
+                        f" — {selected.get('reason', '')}"
                     )
 
-                st.divider()
-                st.subheader("Tool Results")
+                # ------------------------------------------
+                # Individual specialist results
+                # ------------------------------------------
 
-                for tool_result in agent_result["results"]:
-                    tool_name = tool_result["tool"]
-                    status = tool_result["status"]
-                    output = tool_result.get("output")
+                st.divider()
+                st.subheader("Specialist Agent Results")
+
+                results_by_agent = {
+                    item.get("agent"): item
+                    for item in agent_result.get("agent_results", [])
+                }
+
+                for agent_name in agent_result.get("execution_trace", []):
+
+                    specialist = results_by_agent.get(agent_name, {})
+                    status = specialist.get("status", "unknown")
 
                     with st.expander(
-                        f"{tool_name} — {status.upper()}",
+                        f"{agent_name.replace('_', ' ').title()} — "
+                        f"{status.upper()}",
                         expanded=True,
                     ):
+
                         if status == "failed":
                             st.error(
-                                tool_result.get(
-                                    "error", "Unknown tool error."
+                                specialist.get(
+                                    "error",
+                                    "The specialist could not complete its task.",
                                 )
                             )
                             continue
 
-                        if tool_name == "answer_question":
-                            st.caption(
-                                "SQL generation source: "
-                                f"{output.get('source', 'Unknown')}"
+                        if status == "partial":
+                            st.warning(
+                                "The specialist completed only part of its analysis."
                             )
 
-                            st.markdown("**Generated SQL**")
-                            st.code(output["sql"], language="sql")
+                        # Data Analyst
+                        if agent_name == "data_analyst":
+
+                            query_result = specialist.get("result", {})
+
+                            st.caption(
+                                "SQL generation source: "
+                                f"{query_result.get('source', 'Unknown')}"
+                            )
+
+                            sql = query_result.get("sql")
+
+                            if sql:
+                                st.markdown("**Generated SQL**")
+                                st.code(sql, language="sql")
+
+                            query_data = query_result.get("data")
 
                             st.markdown("**Query Results**")
-                            query_data = output.get("data")
 
                             if (
                                 query_data is not None
@@ -780,137 +911,232 @@ try:
                             else:
                                 st.info("No result rows were returned.")
 
-                        elif tool_name == "investigate_revenue_change":
-                            st.markdown("**Investigation Summary**")
-                            st.write(output["summary"])
+                        # Investigator
+                        elif agent_name == "investigator":
 
-                            col1, col2, col3 = st.columns(3)
-
-                            col1.metric(
-                                f"Revenue — {output['previous_month']}",
-                                f"{output['previous_revenue']:,.2f}",
+                            investigation_results = specialist.get(
+                                "results", {}
                             )
 
-                            col2.metric(
-                                f"Revenue — {output['current_month']}",
-                                f"{output['current_revenue']:,.2f}",
+                            revenue = investigation_results.get(
+                                "revenue_investigation"
                             )
 
-                            change_pct = output.get("change_pct")
-                            change_label = (
-                                f"{change_pct:+.1f}%"
-                                if change_pct is not None
-                                else "N/A"
-                            )
-
-                            col3.metric(
-                                "Revenue Change",
-                                f"{output['revenue_change']:+,.2f}",
-                                delta=change_label,
-                            )
-
-                            st.markdown("**Findings to Investigate**")
-                            for finding in output["findings"]:
-                                st.markdown(f"- {finding}")
-
-                            country_data = output["country_drivers"]
-                            product_data = output["product_drivers"]
-
-                            left, right = st.columns(2)
-
-                            with left:
-                                st.markdown("**Largest Country Declines**")
-                                declines = country_data[
-                                    country_data["change"] < 0
-                                ].nsmallest(5, "change")
-
-                                st.dataframe(
-                                    declines,
-                                    use_container_width=True,
-                                    hide_index=True,
+                            if revenue:
+                                st.markdown("**Revenue Investigation**")
+                                st.write(
+                                    revenue.get(
+                                        "summary",
+                                        "No investigation summary available.",
+                                    )
                                 )
 
-                            with right:
-                                st.markdown("**Largest Country Increases**")
-                                increases = country_data[
-                                    country_data["change"] > 0
-                                ].nlargest(5, "change")
+                                col1, col2, col3 = st.columns(3)
 
-                                st.dataframe(
-                                    increases,
-                                    use_container_width=True,
-                                    hide_index=True,
+                                col1.metric(
+                                    "Previous Revenue",
+                                    f"{revenue.get('previous_revenue', 0):,.2f}",
                                 )
 
-                            left, right = st.columns(2)
-
-                            with left:
-                                st.markdown("**Largest Product Declines**")
-                                declines = product_data[
-                                    product_data["change"] < 0
-                                ].nsmallest(5, "change")
-
-                                st.dataframe(
-                                    declines,
-                                    use_container_width=True,
-                                    hide_index=True,
+                                col2.metric(
+                                    "Current Revenue",
+                                    f"{revenue.get('current_revenue', 0):,.2f}",
                                 )
 
-                            with right:
-                                st.markdown("**Largest Product Increases**")
-                                increases = product_data[
-                                    product_data["change"] > 0
-                                ].nlargest(5, "change")
+                                change_pct = revenue.get("change_pct")
 
-                                st.dataframe(
-                                    increases,
-                                    use_container_width=True,
-                                    hide_index=True,
+                                col3.metric(
+                                    "Revenue Change",
+                                    (
+                                        f"{change_pct:+.1f}%"
+                                        if change_pct is not None
+                                        else "N/A"
+                                    ),
                                 )
 
-                            st.markdown("**Recommended Follow-Up Analysis**")
-                            for recommendation in output["recommendations"]:
-                                st.markdown(f"- {recommendation}")
+                                st.markdown("**Key Findings**")
 
-                            st.caption(
-                                "These are observed associations, not "
-                                "proof of business causation."
+                                for finding in revenue.get("findings", []):
+                                    st.markdown(f"- {finding}")
+
+                                country_data = revenue.get("country_drivers")
+                                product_data = revenue.get("product_drivers")
+
+                                left, right = st.columns(2)
+
+                                with left:
+                                    st.markdown("**Country Revenue Drivers**")
+                                    if (
+                                        country_data is not None
+                                        and not country_data.empty
+                                    ):
+                                        st.dataframe(
+                                            country_data,
+                                            use_container_width=True,
+                                            hide_index=True,
+                                        )
+                                    else:
+                                        st.info("No country comparison available.")
+
+                                with right:
+                                    st.markdown("**Product Revenue Drivers**")
+                                    if (
+                                        product_data is not None
+                                        and not product_data.empty
+                                    ):
+                                        st.dataframe(
+                                            product_data,
+                                            use_container_width=True,
+                                            hide_index=True,
+                                        )
+                                    else:
+                                        st.info("No product comparison available.")
+
+                                st.markdown("**Suggested Follow-Up Checks**")
+
+                                for recommendation in revenue.get(
+                                    "recommendations", []
+                                ):
+                                    st.markdown(f"- {recommendation}")
+
+                            anomalies = investigation_results.get(
+                                "anomalies", []
                             )
 
-                        elif tool_name == "detect_anomalies":
-                            st.metric(
-                                "Dates Analyzed",
-                                f"{output['rows_analyzed']:,}",
-                            )
+                            st.markdown("**Potential Revenue Anomalies**")
 
-                            st.metric(
-                                "Potential Anomalies",
-                                f"{output['anomaly_count']:,}",
-                            )
+                            if anomalies:
+                                import pandas as pd
 
-                            flagged = output["anomalies"]
-
-                            if flagged.empty:
-                                st.info(
-                                    "No potential anomalies were detected."
+                                st.dataframe(
+                                    pd.DataFrame(anomalies),
+                                    use_container_width=True,
+                                    hide_index=True,
                                 )
                             else:
-                                st.dataframe(
-                                    flagged,
-                                    use_container_width=True,
-                                    hide_index=True,
+                                st.info("No potential anomalies were flagged.")
+
+                            for error_name, error_message in specialist.get(
+                                "errors", {}
+                            ).items():
+                                st.warning(
+                                    f"{error_name}: {error_message}"
                                 )
 
                             st.caption(
-                                "Anomaly flags identify dates worth "
-                                "investigating; they do not establish causes."
+                                "Revenue comparisons and anomaly flags "
+                                "identify patterns for further investigation; "
+                                "they do not prove business causation."
                             )
 
+                        # Knowledge Researcher
+                        elif agent_name == "knowledge_researcher":
+
+                            st.markdown("**Retrieved Business Knowledge**")
+
+                            st.write(
+                                specialist.get(
+                                    "answer",
+                                    "No research answer was generated.",
+                                )
+                            )
+
+                            st.markdown("**Retrieved Document Sources**")
+
+                            for source in specialist.get("sources", []):
+                                st.markdown(f"- `{source}`")
+                            
+                            # RAG Evidence Viewer
+                            st.divider()
+                            st.markdown("### RAG Evidence Viewer")
+
+                            retrieved_documents = specialist.get(
+                                "retrieved_documents", []
+                            )
+
+                            if retrieved_documents:
+                                st.caption(
+                                    f"Retrieved {len(retrieved_documents)} "
+                                    "document(s) from the ChromaDB knowledge base."
+                                )
+
+                                for index, document in enumerate(
+                                    retrieved_documents, start=1
+                                ):
+                                    source = document.get(
+                                        "source", "Unknown source"
+                                    )
+                                    category = document.get(
+                                        "category", "General"
+                                    )
+                                    distance = document.get("distance")
+
+                                    with st.expander(
+                                        f"Document {index}: {source}",
+                                        expanded=index == 1,
+                                    ):
+                                        st.write(
+                                            f"**Category:** {category}"
+                                        )
+
+                                        if isinstance(
+                                            distance, (int, float)
+                                        ):
+                                            st.caption(
+                                                f"ChromaDB distance: "
+                                                f"{distance:.4f} "
+                                                "(lower generally indicates a closer match)"
+                                            )
+
+                                        st.markdown("**Retrieved Content**")
+                                        st.write(
+                                            document.get(
+                                                "document",
+                                                "No document content available.",
+                                            )
+                                        )
+                            else:
+                                st.info(
+                                    "No retrieved document evidence is available."
+                                )
+
+
+                # ------------------------------------------
+                # Final consolidated report
+                # ------------------------------------------
+
+                st.divider()
+                st.subheader("Consolidated Business Intelligence Report")
+
+                final_report = agent_result.get(
+                    "final_report",
+                    "No final report was generated.",
+                )
+
+                if agent_result.get("report_status") == "completed":
+                    st.success("Final report generated successfully.")
+                else:
+                    st.error("Report generation was unsuccessful.")
+
+                with st.expander(
+                    "View Complete Investigation Report",
+                    expanded=True,
+                ):
+                    st.markdown(final_report)
+
+                    st.download_button(
+                        label="Download Report (.md)",
+                        data=final_report,
+                        file_name="multi_agent_bi_report.md",
+                        mime="text/markdown",
+                        key="download_multi_agent_report",
+                    )
+
             except Exception as error:
-                st.error("The agentic analysis could not be completed.")
+                st.error(
+                    "The multi-agent analysis could not be completed."
+                )
                 st.exception(error)
-
-
 except Exception as error:
     st.error("The dashboard could not load its data.")
     st.exception(error)
