@@ -221,12 +221,10 @@ Create a `.env` file in the project root.
 
 ```text
 GEMINI_API_KEY=your_api_key_here
-GEMINI_MODEL=gemini-3.8-flash
+GEMINI_MODEL=gemini-3.5-flash-lite
 ```
 
-Use a model supported by your Google AI account.
-
-Never commit your actual API key.
+The project uses Google Gemini for supervisor planning, natural-language processing, and knowledge generation. The configured Gemini model is gemini-3.5-flash-lite. Model availability and request limits depend on your Google AI account. The application includes rule-based fallback mechanisms to maintain workflow execution when Gemini is unavailable.
 
 ### Step 5: Prepare the Dataset
 
