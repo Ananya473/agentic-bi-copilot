@@ -4,7 +4,7 @@ import os
 
 from dotenv import load_dotenv
 from google import genai
-
+from google.genai import types
 
 load_dotenv()
 
@@ -202,8 +202,9 @@ User question:
             "agents": validated,
         }
 
-    except Exception:
+    except Exception as error:
         return {
             "source": "Rule-based fallback",
+            "fallback_reason": str(error),
             "agents": rule_based_routing(question),
         }
