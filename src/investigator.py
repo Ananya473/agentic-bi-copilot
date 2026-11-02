@@ -1,5 +1,6 @@
 
 import pandas as pd
+import re
 
 from src.analytics import run_query
 
@@ -301,3 +302,192 @@ def investigate_revenue_change() -> dict:
             "end": str(max_date.date()),
         },
     }
+
+
+def analyze_monthly_revenue(question: str = "") -> dict:
+    """Analyze a requested month or the latest two completed months."""
+
+    date_range = run_query("""
+        SELECT
+            MIN(date(order_date)) AS min_date,
+            MAX(date(order_date)) AS max_date
+        FROM sales
+        WHERE order_date IS NOT NULL
+    """)
+
+    if date_range is None or date_range.empty:
+        raise ValueError("No order dates available.")
+
+    min_date = pd.to_datetime(
+        date_range.iloc[0]["min_date"], errors="coerce"
+    )
+    max_date = pd.to_datetime(
+        date_range.iloc[0]["max_date"], errors="coerce"
+    )
+
+    if pd.isna(min_date) or pd.isna(max_date):
+        raise ValueError("Invalid date range.")
+
+    monthly = run_query("""
+        SELECT
+            substr(order_date, 1, 7) AS month,
+            ROUND(SUM(revenue), 2) AS total_revenue,
+            COUNT(DISTINCT order_id) AS total_orders,
+            SUM(quantity) AS units_sold
+        FROM sales
+        WHERE order_date IS NOT NULL
+        GROUP BY substr(order_date, 1, 7)
+        ORDER BY month
+    """)
+
+    if monthly is None or monthly.empty:
+        raise ValueError("Monthly revenue data unavailable.")
+
+    monthly["month"] = monthly["month"].astype(str)
+    monthly["total_revenue"] = pd.to_numeric(
+        monthly["total_revenue"], errors="coerce"
+    )
+
+    lookup = monthly.set_index("month")
+
+    # Recognize month names mentioned in the question.
+    month_names = {
+        "january": 1, "jan": 1,
+        "february": 2, "feb": 2,
+        "march": 3, "mar": 3,
+        "april": 4, "apr": 4,
+        "may": 5,
+        "june": 6, "jun": 6,
+        "july": 7, "jul": 7,
+        "august": 8, "aug": 8,
+        "september": 9, "sep": 9, "sept": 9,
+        "october": 10, "oct": 10,
+        "november": 11, "nov": 11,
+        "december": 12, "dec": 12,
+    }
+
+    question_lower = question.lower()
+
+    month_pattern = (
+        r"\b(" + "|".join(month_names.keys()) + r")\b"
+    )
+
+    month_match = re.search(month_pattern, question_lower)
+    year_match = re.search(r"\b(20\d{2})\b", question_lower)
+
+    if month_match:
+        requested_month = month_names[month_match.group(1)]
+
+        if year_match:
+            requested_year = int(year_match.group(1))
+            current_period = pd.Period(
+                year=requested_year,
+                month=requested_month,
+                freq="M",
+            )
+        else:
+            matching_periods = [
+                pd.Period(month, freq="M")
+                for month in lookup.index
+                if pd.Period(month, freq="M").month == requested_month
+            ]
+
+            if not matching_periods:
+                raise ValueError(
+                    "The requested month is not available in the dataset."
+                )
+
+            current_period = max(matching_periods)
+
+    else:
+        latest_period = pd.Period(max_date, freq="M")
+
+        if max_date.day < latest_period.days_in_month:
+            current_period = latest_period - 1
+        else:
+            current_period = latest_period
+
+    previous_period = current_period - 1
+
+    previous_month = str(previous_period)
+    current_month = str(current_period)
+
+    if (
+        previous_month not in lookup.index
+        or current_month not in lookup.index
+    ):
+        raise ValueError(
+            f"Revenue data is unavailable for "
+            f"{previous_month} or {current_month}."
+        )
+
+    previous = lookup.loc[previous_month]
+    current = lookup.loc[current_month]
+
+    previous_revenue = float(previous["total_revenue"])
+    current_revenue = float(current["total_revenue"])
+
+    change = current_revenue - previous_revenue
+
+    change_pct = (
+        (change / previous_revenue) * 100
+        if previous_revenue != 0 else None
+    )
+
+    return {
+        "previous_month": previous_month,
+        "current_month": current_month,
+        "previous_revenue": previous_revenue,
+        "current_revenue": current_revenue,
+        "revenue_change": change,
+        "change_pct": change_pct,
+        "previous_orders": int(previous["total_orders"]),
+        "current_orders": int(current["total_orders"]),
+        "previous_units": int(previous["units_sold"]),
+        "current_units": int(current["units_sold"]),
+        "direction": (
+            "declined" if change < 0
+            else "increased" if change > 0
+            else "unchanged"
+        ),
+    }
+
+def investigate_revenue_dimension(
+    previous_month: str,
+    current_month: str,
+    dimension: str,
+) -> dict:
+    """Investigate revenue changes by one selected dimension."""
+
+    if dimension not in ("country", "product"):
+        raise ValueError("Dimension must be country or product.")
+
+    drivers = _get_revenue_by_dimension(
+        previous_month,
+        current_month,
+        dimension,
+    )
+
+    declines = (
+        drivers[drivers["change"] < 0]
+        .sort_values("change")
+        .head(5)
+    )
+
+    increases = (
+        drivers[drivers["change"] > 0]
+        .sort_values("change", ascending=False)
+        .head(5)
+    )
+
+    return {
+        "dimension": dimension,
+        "total_groups": len(drivers),
+        "declines": declines.to_dict(orient="records"),
+        "increases": increases.to_dict(orient="records"),
+        "largest_decline": (
+            declines.iloc[0].to_dict()
+            if not declines.empty else None
+        ),
+    }
+

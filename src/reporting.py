@@ -45,7 +45,11 @@ def _append_top_changes(
         lines.append("No supporting comparison data is available.")
         return
 
-    candidates = data[data["change"] > 0] if positive else data[data["change"] < 0]
+    candidates = (
+        data[data["change"] > 0]
+        if positive
+        else data[data["change"] < 0]
+    )
 
     candidates = candidates.sort_values(
         "change",
@@ -73,6 +77,95 @@ def _append_top_changes(
             )
 
         lines.append(detail)
+
+
+def _generate_recommendations(
+    output: dict,
+    anomalies: pd.DataFrame | None = None,
+) -> list[str]:
+    """Generate follow-up checks from the actual investigation evidence."""
+
+    recommendations = []
+
+    change_pct = output.get("change_pct")
+
+    if isinstance(change_pct, numbers.Real):
+        if change_pct < 0:
+            recommendations.append(
+                "Compare order volume and units sold between the two months "
+                "to determine whether the revenue decline is associated "
+                "with fewer orders or lower sales volume."
+            )
+        elif change_pct > 0:
+            recommendations.append(
+                "Identify which countries and products contributed most "
+                "to the revenue increase and check whether the growth "
+                "is sustained in subsequent months."
+            )
+
+    countries = output.get("country_drivers")
+    products = output.get("product_drivers")
+
+    if isinstance(countries, pd.DataFrame) and not countries.empty:
+        if "change" in countries.columns and "country" in countries.columns:
+            declines = countries[countries["change"] < 0].sort_values(
+                "change"
+            )
+
+            if not declines.empty:
+                largest = declines.iloc[0]
+
+                recommendations.append(
+                    f"Investigate the decline in {largest['country']} "
+                    "by checking order counts, customer activity and "
+                    "regional demand."
+                )
+
+    if isinstance(products, pd.DataFrame) and not products.empty:
+        if "change" in products.columns and "product" in products.columns:
+            declines = products[products["change"] < 0].sort_values(
+                "change"
+            )
+
+            if not declines.empty:
+                largest = declines.iloc[0]
+
+                recommendations.append(
+                    f"Review sales of {largest['product']} by checking "
+                    "stock availability, order frequency and changes "
+                    "in product demand."
+                )
+
+    if anomalies is not None and not anomalies.empty:
+        high_count = 0
+        low_count = 0
+
+        if "anomaly_type" in anomalies.columns:
+            anomaly_types = anomalies["anomaly_type"].astype(str).str.lower()
+            high_count = int(anomaly_types.str.contains("high").sum())
+            low_count = int(anomaly_types.str.contains("low").sum())
+
+        if high_count:
+            recommendations.append(
+                f"Review the {high_count} unusually high-revenue days "
+                "for large orders, bulk purchases or unusually concentrated "
+                "customer activity."
+            )
+
+        if low_count:
+            recommendations.append(
+                f"Investigate the {low_count} unusually low-revenue days "
+                "for order cancellations, reduced demand or transaction "
+                "recording issues."
+            )
+
+    if not recommendations:
+        recommendations.append(
+            "Continue monitoring monthly revenue, order volume and "
+            "product performance to identify emerging changes."
+        )
+
+    return recommendations
 
 
 def build_evidence_report(agent_result: dict) -> str:
@@ -103,6 +196,7 @@ def build_evidence_report(agent_result: dict) -> str:
         item for item in results
         if item.get("status") == "completed"
     ]
+
     failed = [
         item for item in results
         if item.get("status") != "completed"
@@ -113,6 +207,7 @@ def build_evidence_report(agent_result: dict) -> str:
 
     if failed:
         lines.append("\n### Tool Errors")
+
         for item in failed:
             lines.append(
                 f"- **{item.get('tool', 'Unknown tool')}:** "
@@ -156,6 +251,7 @@ def build_evidence_report(agent_result: dict) -> str:
                     "country",
                     positive=False,
                 )
+
                 _append_top_changes(
                     lines,
                     "Largest Country Revenue Increases",
@@ -172,6 +268,7 @@ def build_evidence_report(agent_result: dict) -> str:
                     "product",
                     positive=False,
                 )
+
                 _append_top_changes(
                     lines,
                     "Largest Product Revenue Increases",
@@ -181,13 +278,14 @@ def build_evidence_report(agent_result: dict) -> str:
                 )
 
             recommendations = output.get("recommendations", [])
+
+            if not recommendations:
+                recommendations = _generate_recommendations(output)
+
             lines.append("\n### Suggested Follow-Up Checks")
 
-            if recommendations:
-                for recommendation in recommendations:
-                    lines.append(f"- {recommendation}")
-            else:
-                lines.append("No follow-up checks were provided.")
+            for recommendation in recommendations:
+                lines.append(f"- {recommendation}")
 
         elif tool == "detect_anomalies":
             flagged = output.get("anomalies")
@@ -226,6 +324,17 @@ def build_evidence_report(agent_result: dict) -> str:
                 "They do not establish why the revenue movement occurred."
             )
 
+            if isinstance(flagged, pd.DataFrame):
+                anomaly_recommendations = _generate_recommendations(
+                    {},
+                    flagged,
+                )
+
+                lines.append("\n### Anomaly Follow-Up Checks")
+
+                for recommendation in anomaly_recommendations:
+                    lines.append(f"- {recommendation}")
+
         elif tool == "answer_question":
             lines.extend([
                 "",
@@ -236,6 +345,7 @@ def build_evidence_report(agent_result: dict) -> str:
             lines.append(f"- SQL generation source: {source}")
 
             query = output.get("sql")
+
             if query:
                 lines.extend([
                     "",
@@ -249,19 +359,19 @@ def build_evidence_report(agent_result: dict) -> str:
             frame = output.get("data")
 
             if isinstance(frame, pd.DataFrame):
-                lines.append(
-                    f"\nReturned rows: {len(frame):,}"
-                )
+                lines.append(f"\nReturned rows: {len(frame):,}")
 
                 if frame.empty:
                     lines.append("The query returned no rows.")
                 else:
                     lines.append("\n### Sample Results")
+
                     for _, row in frame.head(5).iterrows():
                         fields = [
                             f"{column}: {_format_value(value)}"
                             for column, value in row.items()
                         ]
+
                         lines.append("- " + "; ".join(fields))
 
                     if len(frame) > 5:
