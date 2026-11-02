@@ -1,103 +1,206 @@
 # Agentic AI Business Intelligence Copilot
 
-An AI-assisted business intelligence dashboard that combines retail sales analytics, interactive visualizations, natural-language-to-SQL generation, and read-only database querying.
+An intelligent, multi-agent Business Intelligence system that combines **Agentic AI, Retrieval-Augmented Generation (RAG), Text-to-SQL, and data analytics** to investigate retail business questions and generate evidence-backed reports.
 
-## Overview
+## 1. Project Overview
 
-Business teams need to answer questions about revenue, product performance, customer behavior, and sales trends without manually writing SQL for every analysis.
+Traditional Business Intelligence systems often require users to understand SQL, navigate dashboards, and manually investigate business trends.
 
-This project combines a Streamlit dashboard with Google Gemini-powered SQL generation and a SQLite database to make retail sales data easier to explore. Users can ask business questions in natural language, inspect the generated SQL, and view the results through the application.
+The Agentic AI Business Intelligence Copilot simplifies this process by allowing users to ask questions in natural language.
 
-## Features
-- **Interactive analytics dashboard:** Explore retail KPIs, monthly revenue, products, countries, customers, and returns.
-- **Natural-language Text-to-SQL:** Translate supported business questions into SQL using Gemini, with a rule-based fallback.
-- **Read-only SQL execution:** Restrict analytical queries to approved read operations.
-- **Statistical anomaly detection:** Flag unusual daily revenue using a rolling median and median absolute deviation (MAD).
-- **Multi-step revenue investigation:** Compare monthly performance and investigate country- and product-level revenue changes.
-- **Tool orchestration:** Select and execute predefined analysis tools using a Gemini planner or rule-based fallback.
-- **Evidence-backed reporting:** Consolidate actual query results, revenue comparisons, anomaly flags, and suggested follow-up checks into a downloadable Markdown report.
-- **Automated testing:** Test analytics, anomaly detection, investigation logic, agent execution, and report generation.
+Instead of relying on a single AI model, the system uses a supervisor-driven multi-agent architecture. A Supervisor Agent understands the user's question, selects the appropriate specialist agents, coordinates their execution through LangGraph, and passes their findings to a Report Agent.
 
-## Dataset
+The system combines structured retail data stored in SQLite with unstructured business documents retrieved through a RAG pipeline.
 
-This project uses the **UCI Online Retail dataset**, containing transactions from a UK-based online retailer between December 2010 and December 2011.
+## 2. Key Features
 
-The dataset includes product descriptions, invoice identifiers, quantities, unit prices, customer identifiers, transaction dates, and countries.
+- **Multi-Agent Architecture:** Uses specialized AI agents for structured data analysis, revenue investigation, and business knowledge retrieval.
+- **Supervisor Agent:** Analyzes incoming questions and dynamically selects the appropriate specialist agents.
+- **LangGraph Orchestration:** Coordinates agent execution, maintains workflow state, and manages the overall analysis pipeline.
+- **Retrieval-Augmented Generation (RAG):** Retrieves relevant business documents using ChromaDB and Gemini embeddings.
+- **Natural Language to SQL:** Converts supported business questions into SQL queries with a rule-based fallback.
+- **Revenue Investigation:** Compares revenue across periods and identifies country- and product-level contributors.
+- **Anomaly Detection:** Identifies unusual revenue patterns using rolling median and Median Absolute Deviation (MAD).
+- **Evidence-Based Reporting:** Consolidates specialist findings, retrieved document excerpts, and analytical results into a downloadable report.
+- **Interactive Streamlit Dashboard:** Provides visual analytics, agent execution status, and multi-agent analysis results.
+- **Supervisor Evaluation:** Includes a manually labelled evaluation dataset to assess agent selection performance.
 
-The project imports the source data into SQLite and creates a sales table for positive-quantity sales analysis while retaining the original transaction records for returns and cancellation analysis.
+## 3. Multi-Agent Architecture
 
-**Data limitations:**
-- The source dataset includes returns and cancelled invoices.
-- Some transactions do not have customer identifiers.
-- The current category field is `Uncategorized` because the source dataset does not provide product categories.
-- Revenue figures reflect the dataset's transaction values; they should not be interpreted as audited financial results.
+The project follows a supervisor-driven architecture.
 
-## Technology Stack
+### Workflow
 
-- **Python** — application logic and analytics
-- **Streamlit** — interactive dashboard
-- **Pandas** — data processing and query results
-- **SQLite** — retail data storage and SQL execution
-- **Google Gemini API** — natural-language SQL generation
-- **Pytest** — automated testing
+1. **User Input:** The user submits a business question through the Streamlit interface.
+2. **Supervisor Agent:** Analyzes the question and determines which specialist agents are required.
+3. **Specialist Execution:** The selected agents perform their assigned tasks.
+4. **Report Agent:** Consolidates the outputs into a structured business intelligence report.
+5. **Final Output:** The user receives the analysis, findings, evidence, and execution summary.
 
+### Specialist Agents
 
-## Project Structure
+| Agent | Responsibility |
+|---|---|
+| Supervisor Agent | Understands the question and selects specialist agents. |
+| Data Analyst Agent | Handles SQL queries, KPIs, revenue, products, and customer analytics. |
+| Investigator Agent | Investigates revenue changes, identifies contributing countries and products, and detects anomalies. |
+| Knowledge Researcher Agent | Retrieves relevant business documents using RAG and generates document-grounded answers. |
+| Report Agent | Consolidates agent outputs into an evidence-backed report. |
+
+### Architecture Flow
+
+```text
+                 USER QUESTION
+                       |
+                       v
+                SUPERVISOR AGENT
+                       |
+             AGENT SELECTION
+                       |
+          +------------+------------+
+          |            |            |
+          v            v            v
+     DATA ANALYST  INVESTIGATOR  KNOWLEDGE
+       AGENT          AGENT      RESEARCHER
+          |            |            |
+          v            v            v
+       SQL DATA    INVESTIGATION   RAG / CHROMADB
+       ANALYSIS    & ANOMALIES     RETRIEVAL
+          |            |            |
+          +------------+------------+
+                       |
+                       v
+                  REPORT AGENT
+                       |
+                       v
+              FINAL BI REPORT
+```
+
+The diagram represents the logical workflow. The supervisor dynamically selects agents based on the incoming question; not every agent runs for every request.
+
+## 4. Retrieval-Augmented Generation (RAG)
+
+The system uses RAG to answer questions that require business knowledge beyond the structured retail database.
+
+### RAG Pipeline
+
+1. Business documents are loaded from the knowledge-base document directory.
+2. Gemini embeddings convert document content into vector representations.
+3. ChromaDB stores the document embeddings and associated metadata.
+4. When a user asks a knowledge-related question, relevant documents are retrieved through semantic similarity search.
+5. The Knowledge Researcher uses the retrieved context to generate an answer grounded in the available documents.
+
+### Knowledge Base Documents
+
+The demonstration knowledge base includes:
+
+- Return Policy
+- Promotional Campaigns
+- Inventory Management
+- Customer Behaviour
+
+**Note:** These are synthetic demonstration documents created for the project. They should not be interpreted as verified policies of the retailer in the dataset.
+
+## 5. Technology Stack
+
+| Technology | Purpose |
+|---|---|
+| Python | Core application development |
+| LangGraph | Multi-agent workflow orchestration |
+| Google Gemini API | Agent planning, embeddings, and language generation |
+| ChromaDB | Vector database for semantic retrieval |
+| Streamlit | Interactive application interface |
+| SQLite | Structured retail data storage |
+| Pandas | Data processing and analysis |
+| Plotly | Interactive data visualizations |
+| SQL | Business queries and analytical operations |
+| Pytest | Automated testing |
+
+## 6. Dataset
+
+The project uses the **UCI Online Retail Dataset**, containing transactions from a UK-based online retailer between December 2010 and December 2011.
+
+The dataset includes:
+
+- Invoice numbers
+- Product descriptions
+- Quantities
+- Unit prices
+- Customer identifiers
+- Invoice dates
+- Countries
+
+The source dataset is imported into SQLite for structured analysis.
+
+The analytical pipeline distinguishes positive-quantity sales from returns and cancellations.
+
+## 7. Project Structure
 
 ```text
 agentic-bi-copilot/
 │
+├── app.py
+├── requirements.txt
 ├── .env.example
 ├── .gitignore
 ├── README.md
-├── requirements.txt
-├── app.py
 │
 ├── data/
-│   ├── Online Retail.xlsx          # Local dataset; not committed
-│   ├── extracted/
-│   │   └── Online Retail.xlsx      # Extracted dataset; not committed
-│   └── retail_sales.db             # Generated SQLite database; not committed
+│   └── Online Retail.xlsx
+│
+├── chroma_db/
+│   └── Generated vector database
 │
 ├── src/
-│   ├── __init__.py
-│   ├── analytics.py                # SQL-based retail analytics and KPIs
-│   ├── agent.py                    # Tool selection and orchestration
-│   ├── anomaly_detection.py        # Statistical revenue anomaly detection
-│   ├── create_database.py          # Database creation utilities
-│   ├── gemini_connection_check.py  # Gemini API connectivity check
-│   ├── import_online_retail.py     # Retail dataset import pipeline
-│   ├── insights.py                 # Business insight generation
-│   ├── investigator.py             # Multi-step revenue investigation
-│   ├── query_engine.py             # Read-only SQL execution safeguards
-│   ├── question_service.py         # Business question processing
-│   ├── reporting.py                # Evidence-backed report generation
-│   └── text_to_sql.py              # Natural-language-to-SQL generation
+│   ├── agents/
+│   │   ├── supervisor.py
+│   │   ├── data_analyst.py
+│   │   ├── investigator_agent.py
+│   │   ├── knowledge_researcher.py
+│   │   └── report_agent.py
+│   │
+│   ├── graph/
+│   │   ├── state.py
+│   │   ├── nodes.py
+│   │   └── workflow.py
+│   │
+│   ├── knowledge_base/
+│   │   ├── vector_store.py
+│   │   └── documents/
+│   │
+│   ├── evaluation/
+│   │   └── supervisor_evaluation.py
+│   │
+│   ├── analytics.py
+│   ├── anomaly_detection.py
+│   ├── investigator.py
+│   ├── reporting.py
+│   ├── question_service.py
+│   ├── query_engine.py
+│   └── text_to_sql.py
 │
 └── tests/
-    ├── test_agent.py               # Agent planning and execution tests
-    ├── test_anomaly_detection.py   # Anomaly detection tests
-    ├── test_insights.py            # Business insight tests
-    ├── test_investigator.py        # Revenue investigation tests
-    ├── test_reporting.py           # Report generation tests
-    └── test_text_to_sql.py         # Text-to-SQL and service tests
+    └── Automated test modules
 ```
 
-**Note:** The `data/` files shown above are local runtime files and are excluded from Git. Download or extract the dataset and generate the SQLite database using the project's setup instructions.
+Generated databases and local datasets are not necessarily included in the Git repository. Check the repository's `.gitignore` before assuming these files are available after cloning.
 
+## 8. Installation and Setup
 
-## Getting Started
+### Prerequisites
 
-### 1. Clone the repository
+- Python 3.11 or later, compatible with the project dependencies
+- Git
+- Google Gemini API key
 
-Replace the placeholder with your GitHub repository URL.
+### Step 1: Clone the Repository
 
 ```bash
-git clone YOUR_GITHUB_REPOSITORY_URL
+git clone https://github.com/Ananya473/agentic-bi-copilot.git
 cd agentic-bi-copilot
 ```
 
-### 2. Create and activate a virtual environment
+### Step 2: Create a Virtual Environment
 
 Windows PowerShell:
 
@@ -106,86 +209,105 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 
-### 3. Install dependencies
+### Step 3: Install Dependencies
 
 ```powershell
 python -m pip install -r requirements.txt
 ```
 
-### 4. Prepare the dataset
+### Step 4: Configure Environment Variables
 
-Download the UCI Online Retail dataset and place the source file at the path expected by `src/import_online_retail.py`.
-
-Run the import script:
-
-```powershell
-python -m src.import_online_retail
-```
-
-This creates or refreshes `data/retail_sales.db`.
-
-If you distribute a prebuilt database, ensure its provenance, size, and licensing are appropriate for your repository. Do not assume the database is present in a fresh clone.
-
-### 5. Configure Gemini
-
-Create a `.env` file in the project root:
+Create a `.env` file in the project root.
 
 ```text
 GEMINI_API_KEY=your_api_key_here
 GEMINI_MODEL=gemini-3.8-flash
 ```
 
-Use a model available to your Google AI account. Keep the `.env` file private and never commit API credentials.
+Use a model supported by your Google AI account.
 
-The application includes a rule-based fallback for supported questions when Gemini is unavailable.
+Never commit your actual API key.
 
-### 6. Launch the dashboard
+### Step 5: Prepare the Dataset
+
+Download the UCI Online Retail dataset and place the Excel file at the location expected by the project's import script.
+
+Run the database import process:
 
 ```powershell
-python -m streamlit run app.py
+python -m src.import_online_retail
+```
+
+### Step 6: Launch the Application
+
+```powershell
+streamlit run app.py
 ```
 
 Open the local URL displayed in the terminal.
 
-## Example Business Questions
+## 9. Example Business Questions
 
-Try supported questions such as:
+The following questions demonstrate the different capabilities of the system:
 
-- Show revenue by country.
-- Show monthly revenue.
-- Show the top 10 products by revenue.
-- Who are the top 10 customers by revenue?
-- What is our total revenue?
-- Summarize returns and cancellations.
+**Data Analyst**
+- What is the total revenue?
+- Which five products generate the highest revenue?
+- Which countries have the highest sales?
 
-Supported questions depend on the natural-language SQL logic and the available database columns.
+**Investigator**
+- Why did revenue change between two months?
+- Which countries contributed most to the revenue decline?
+- Are there unusual spikes in daily revenue?
 
-## Testing
+**Knowledge Researcher**
+- Explain the return policy.
+- How do promotional campaigns affect customer behaviour?
+- How does inventory management handle out-of-stock products?
 
-Run the test suite from the project root:
+**Multi-Agent Analysis**
+- Investigate the revenue decline and check whether promotional campaigns could explain it.
 
-```powershell
-python -m pytest -v
-```
+The supervisor selects agents based on the question and the available routing logic.
 
-The current verified test run completed with **8 passing tests**.
+## 10. Evaluation and Testing
 
-## Security Considerations
+The project includes automated tests for analytics, SQL processing, anomaly detection, investigation logic, agent execution, and report generation.
 
-- Never commit API keys or other credentials.
-- Keep SQL execution read-only and restrict access to approved tables.
-- Validate AI-generated SQL independently of the prompt.
-- Treat model-generated queries as untrusted input.
-- Avoid exposing sensitive customer-level information in public deployments.
+**Verified test result:**
 
-## Limitations and Future Improvements
+- 56 tests passed.
+- 2 deprecation warnings.
 
-- The category field currently contains only `Uncategorized`, limiting meaningful category comparisons.
-- Rule-based fallback supports a limited set of question patterns.
-- Gemini-generated SQL may require additional validation and testing for unfamiliar questions.
-- The current application demonstrates AI-assisted analytics; a more advanced agentic workflow could add multi-step investigation, insight evaluation, and evidence-backed recommendations.
-- Future improvements include richer business explanations, query evaluation, anomaly investigation, and deployment.
+The Supervisor Agent also includes a manually labelled evaluation dataset of 10 business questions.
 
-## Author
+Its evaluation measures:
+- Exact-match routing accuracy
+- Precision
+- Recall
+- F1-score
 
-Developed as a portfolio project demonstrating Python, SQL, data analysis, dashboard development, and AI-assisted business intelligence.
+The evaluation results depend on the selected routing implementation. Rule-based fallback results should not be presented as Gemini model evaluation results.
+
+## 11. Limitations
+
+- Gemini API requests are subject to model availability and account-specific quotas.
+- The Supervisor uses rule-based routing when Gemini is unavailable.
+- Knowledge Researcher response generation requires Gemini, although document retrieval can operate independently.
+- The knowledge-base documents are synthetic demonstration data.
+- Rule-based routing supports a limited range of question patterns.
+- The dataset does not provide meaningful product categories, so category-level analysis is limited.
+- The project is a demonstration system and is not intended to replace a production enterprise BI platform.
+
+## 12. Future Scope
+
+- Improve supervisor routing through larger evaluation datasets.
+- Add more specialist agents for forecasting and customer segmentation.
+- Improve agent coordination and recovery from individual agent failures.
+- Expand the knowledge base with verified business documents.
+- Add more advanced business recommendation and decision-support capabilities.
+- Deploy the application with production-grade monitoring and authentication.
+
+## 13. Author
+
+Developed as an academic and portfolio project demonstrating Agentic AI, multi-agent systems, Retrieval-Augmented Generation, Python, SQL, and Business Intelligence.
