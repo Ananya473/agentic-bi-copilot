@@ -11,16 +11,69 @@ AGENT_RESPONSIBILITIES = {
 }
 
 
+def format_anomaly_details(anomalies_df: pd.DataFrame) -> str:
+    """Format detected revenue anomalies as a readable Markdown table."""
+
+    if anomalies_df.empty:
+        return "No unusual daily revenue patterns were detected."
+
+    required_columns = [
+        "date",
+        "total_revenue",
+        "expected_revenue",
+        "deviation_pct",
+        "anomaly_type",
+    ]
+
+    available_columns = [
+        column for column in required_columns
+        if column in anomalies_df.columns
+    ]
+
+    if not available_columns:
+        return "Anomaly details were unavailable."
+
+    details = anomalies_df[available_columns].copy()
+
+    lines = [
+        "| Date | Actual Revenue | Expected Revenue | Deviation | Type |",
+        "|---|---:|---:|---:|---|",
+    ]
+
+    for _, row in details.iterrows():
+        date = row.get("date", "Unknown")
+        actual = row.get("total_revenue")
+        expected = row.get("expected_revenue")
+        deviation = row.get("deviation_pct")
+        anomaly_type = row.get("anomaly_type", "Unknown")
+
+        actual_text = (
+            f"{actual:,.2f}"
+            if pd.notna(actual) else "N/A"
+        )
+        expected_text = (
+            f"{expected:,.2f}"
+            if pd.notna(expected) else "N/A"
+        )
+        deviation_text = (
+            f"{deviation:+.2f}%"
+            if pd.notna(deviation) else "N/A"
+        )
+
+        lines.append(
+            f"| {date} | {actual_text} | {expected_text} "
+            f"| {deviation_text} | {anomaly_type} |"
+        )
+
+    return "\n".join(lines)
+
+
 def report_agent(
     question: str,
     planner_source: str,
     agent_results: list[dict],
 ) -> dict:
-    """
-    Report Agent:
-    Combines specialist agent outputs into one
-    evidence-based business intelligence report.
-    """
+    """Combine specialist outputs into an evidence-based report."""
 
     if not question or not question.strip():
         raise ValueError("Question cannot be empty.")
@@ -30,10 +83,7 @@ def report_agent(
 
     normalized_results = []
     knowledge_sections = []
-
-    # ------------------------------------------
-    # Agent execution summary
-    # ------------------------------------------
+    anomaly_details = None
 
     execution_lines = [
         "## Agent Execution Summary",
@@ -54,10 +104,6 @@ def report_agent(
             f"({responsibility}): {status.title()}"
         )
 
-        # --------------------------------------
-        # Data Analyst
-        # --------------------------------------
-
         if agent == "data_analyst":
             if status == "completed":
                 normalized_results.append({
@@ -69,18 +115,12 @@ def report_agent(
                 normalized_results.append({
                     "tool": "answer_question",
                     "status": "failed",
-                    "error": item.get(
-                        "error",
-                        "Data Analyst failed.",
-                    ),
+                    "error": item.get("error", "Data Analyst failed."),
                 })
-
-        # --------------------------------------
-        # Investigator
-        # --------------------------------------
 
         elif agent == "investigator":
             results = item.get("results", {})
+            errors = item.get("errors", {})
 
             revenue = results.get("revenue_investigation")
 
@@ -91,44 +131,64 @@ def report_agent(
                     "output": revenue,
                 })
 
-            anomalies = results.get("anomalies", [])
-            anomalies_df = pd.DataFrame(anomalies)
+            if "anomalies" in results:
+                anomalies_df = pd.DataFrame(results["anomalies"])
 
-            if "is_anomaly" not in anomalies_df.columns:
-                anomalies_df["is_anomaly"] = True
+                if "is_anomaly" not in anomalies_df.columns:
+                    anomalies_df["is_anomaly"] = True
 
-            normalized_results.append({
-                "tool": "detect_anomalies",
-                "status": "completed",
-                "output": {
-                    "anomalies": anomalies_df,
-                    "anomaly_count": len(anomalies_df),
-                },
-            })
+                if not anomalies_df.empty:
+                    anomalies_df = anomalies_df[
+                        anomalies_df["is_anomaly"].fillna(False)
+                    ].copy()
 
-            for name, error in item.get("errors", {}).items():
+                anomaly_details = format_anomaly_details(
+                    anomalies_df
+                )
+
+                analyzed_count = item.get(
+                    "anomaly_rows_analyzed", 0
+                )
+
                 normalized_results.append({
-                    "tool": name,
-                    "status": "failed",
-                    "error": error,
+                    "tool": "detect_anomalies",
+                    "status": "completed",
+                    "output": {
+                        "anomalies": anomalies_df,
+                        "anomaly_count": len(anomalies_df),
+                        "rows_analyzed": analyzed_count,
+                        "dates_analyzed": analyzed_count,
+                    },
                 })
+
+            elif "anomaly_detection" in errors:
+                normalized_results.append({
+                    "tool": "detect_anomalies",
+                    "status": "failed",
+                    "error": errors["anomaly_detection"],
+                })
+
+            for name, error in errors.items():
+                if name != "anomaly_detection":
+                    normalized_results.append({
+                        "tool": name,
+                        "status": "failed",
+                        "error": error,
+                    })
 
             if status == "failed" and not results:
                 normalized_results.append({
                     "tool": "investigator",
                     "status": "failed",
-                    "error": "Investigator could not produce results.",
+                    "error": item.get(
+                        "error",
+                        "Investigator could not produce results.",
+                    ),
                 })
-
-        # --------------------------------------
-        # Knowledge Researcher (RAG)
-        # --------------------------------------
 
         elif agent == "knowledge_researcher":
             if status == "completed":
-                documents = item.get(
-                    "retrieved_documents", []
-                )
+                documents = item.get("retrieved_documents", [])
                 sources = item.get("sources", [])
 
                 knowledge_sections.extend([
@@ -137,10 +197,7 @@ def report_agent(
                     "",
                     "### Research Answer",
                     "",
-                    item.get(
-                        "answer",
-                        "No answer was generated.",
-                    ),
+                    item.get("answer", "No answer was generated."),
                     "",
                     "### Retrieved Evidence",
                     "",
@@ -148,8 +205,7 @@ def report_agent(
 
                 if documents:
                     for index, document in enumerate(
-                        documents,
-                        start=1,
+                        documents, start=1
                     ):
                         knowledge_sections.extend([
                             f"#### Document {index}: "
@@ -183,15 +239,12 @@ def report_agent(
                         "No retrieved document excerpts were provided."
                     )
 
-                    # Backward compatibility:
-                    # Include source filenames even if excerpts are absent.
                     if sources:
                         knowledge_sections.extend([
                             "",
                             "**Retrieved document sources:**",
                             "",
                         ])
-
                         knowledge_sections.extend(
                             f"- {source}" for source in sources
                         )
@@ -205,10 +258,6 @@ def report_agent(
                     + item.get("error", "Unknown error."),
                 ])
 
-    # ------------------------------------------
-    # Build the existing evidence report
-    # ------------------------------------------
-
     report_input = {
         "question": question.strip(),
         "planner_source": planner_source,
@@ -218,8 +267,6 @@ def report_agent(
     try:
         report = build_evidence_report(report_input)
 
-        # Insert additional sections after the title
-        # and business question, before detailed findings.
         report_parts = report.split(
             "## Execution Summary",
             1,
@@ -236,14 +283,35 @@ def report_agent(
                 + report_parts[1]
             )
 
+        if anomaly_details is not None:
+            anomaly_section = (
+                "\n\n### Individual Anomaly Details\n\n"
+                + anomaly_details
+                + "\n"
+            )
+
+            marker = "## Interpretation and Limitations"
+
+            if marker in report:
+                report = report.replace(
+                    marker,
+                    anomaly_section + "\n" + marker,
+                    1,
+                )
+            else:
+                report += (
+                    "\n\n## Individual Anomaly Details\n\n"
+                    + anomaly_details
+                    + "\n"
+                )
+
         return {
             "agent": "report_agent",
             "status": "completed",
             "question": question,
             "report": report,
             "agents_used": [
-                item.get("agent")
-                for item in agent_results
+                item.get("agent") for item in agent_results
             ],
         }
 

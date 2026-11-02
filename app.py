@@ -684,36 +684,35 @@ try:
         workflow_diagram = """
         digraph AgentWorkflow {
             rankdir=TB;
-            graph [bgcolor="transparent", nodesep=0.5, ranksep=0.6];
+            graph [bgcolor="transparent", nodesep=0.45, ranksep=0.55];
             node [shape=box, style="rounded,filled",
                   fontname="Arial", color="#64748b"];
             edge [color="#64748b"];
 
             User [label="User Question", fillcolor="#dbeafe"];
-            Supervisor [label="Supervisor Agent\\nGemini Planning",
-                         fillcolor="#ede9fe"];
-
-            DataAnalyst [label="Data Analyst\\nSQL Queries",
-                         fillcolor="#d1fae5"];
-            Investigator [label="Investigator\\nRevenue & Anomalies",
-                          fillcolor="#d1fae5"];
-            Researcher [label="Knowledge Researcher\\nRAG + ChromaDB",
-                        fillcolor="#d1fae5"];
-
-            Reporter [label="Report Agent\\nEvidence Consolidation",
-                      fillcolor="#fef3c7"];
+            Supervisor [label="Supervisor\\nGemini Planning", fillcolor="#ede9fe"];
+            Monthly [label="Monthly Revenue\\nAnalysis", fillcolor="#d1fae5"];
+            Decision [label="Revenue Declined?", shape=diamond, fillcolor="#fef3c7"];
+            Country [label="Country-Level\\nInvestigation", fillcolor="#d1fae5"];
+            CountryDecision [label="Declining Country Found?", shape=diamond, fillcolor="#fef3c7"];
+            Product [label="Product-Level\\nInvestigation", fillcolor="#d1fae5"];
+            Anomaly [label="Daily Revenue\\nAnomaly Detection", fillcolor="#d1fae5"];
+            Reporter [label="Report Agent\\nEvidence Consolidation", fillcolor="#fde68a"];
+            Reviewer [label="Reviewer", fillcolor="#e0e7ff"];
             Output [label="Final BI Report", fillcolor="#e0e7ff"];
 
             User -> Supervisor;
-            Supervisor -> DataAnalyst;
-            Supervisor -> Investigator;
-            Supervisor -> Researcher;
-
-            DataAnalyst -> Reporter;
-            Investigator -> Reporter;
-            Researcher -> Reporter;
-
-            Reporter -> Output;
+            Supervisor -> Monthly;
+            Monthly -> Decision;
+            Decision -> Country [label="Yes"];
+            Decision -> Anomaly [label="No"];
+            Country -> CountryDecision;
+            CountryDecision -> Product [label="Yes"];
+            CountryDecision -> Anomaly [label="No"];
+            Product -> Anomaly;
+            Anomaly -> Reporter;
+            Reporter -> Reviewer;
+            Reviewer -> Output;
         }
         """
 
@@ -789,7 +788,7 @@ try:
                 agent_details = [
                     ("Supervisor", "Task planning", "completed"),
                     ("Data Analyst", "SQL queries", "data_analyst"),
-                    ("Investigator", "Revenue and anomaly analysis", "investigator"),
+                    ("Investigator", "Adaptive revenue and anomaly analysis", "investigator"),
                     ("Knowledge Researcher", "RAG and document retrieval", "knowledge_researcher"),
                 ]
 
@@ -825,6 +824,38 @@ try:
                     use_container_width=True,
                     hide_index=True,
                 )
+
+                # ------------------------------------------
+                # Adaptive investigation journey
+                # ------------------------------------------
+
+                st.subheader("Adaptive Investigation Journey")
+
+                execution_trace = agent_result.get("execution_trace", [])
+                investigation_decisions = agent_result.get(
+                    "investigation_decisions", []
+                )
+
+                journey_labels = {
+                    "monthly_analysis": "Monthly revenue analysis",
+                    "country_analysis": "Country-level investigation",
+                    "product_analysis": "Product-level investigation",
+                }
+
+                if execution_trace:
+                    for index, node_name in enumerate(execution_trace, start=1):
+                        label = journey_labels.get(
+                            node_name,
+                            node_name.replace("_", " ").title(),
+                        )
+                        st.markdown(f"**{index}. {label}**")
+                else:
+                    st.info("No adaptive investigation steps were recorded.")
+
+                if investigation_decisions:
+                    with st.expander("Why these steps were selected", expanded=True):
+                        for decision in investigation_decisions:
+                            st.markdown(f"- {decision}")
     
 
                 # ------------------------------------------
@@ -854,9 +885,9 @@ try:
                     for item in agent_result.get("agent_results", [])
                 }
 
-                for agent_name in agent_result.get("execution_trace", []):
+                for specialist in agent_result.get("agent_results", []):
 
-                    specialist = results_by_agent.get(agent_name, {})
+                    agent_name = specialist.get("agent", "unknown")
                     status = specialist.get("status", "unknown")
 
                     with st.expander(
