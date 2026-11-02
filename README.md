@@ -1,4 +1,4 @@
-
+[
 Agentic AI Business Intelligence Copilot
 An intelligent, multi-agent Business Intelligence system that combines Agentic AI, Retrieval-Augmented Generation (RAG), Text-to-SQL, and data analytics to investigate retail business questions and generate evidence-backed reports.
 
@@ -316,3 +316,4 @@ Deploy the application with production-grade monitoring and authentication.
 15. Author
 Developed as an academic and portfolio project demonstrating Agentic AI, adaptive multi-agent systems, Retrieval-Augmented Generation, Python, SQL, and Business Intelligence.
 
+](https://github.com/Ananya473/agentic-bi-copilot)
